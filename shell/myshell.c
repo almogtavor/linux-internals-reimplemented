@@ -72,10 +72,12 @@ int process_arglist(int count, char **arglist) {
                 perror("open input");
                 exit(1);
             }
-
-            redirect(fd, STDIN_FILENO);
+            // now when the program tries to read from standard input it's actually reading from the file instead
+            redirect(fd, STDIN_FILENO); 
+            // Set < to NULL so execvp() only sees the actual command (not < or file)
             arglist[input_idx] = NULL;
             execvp(arglist[0], arglist);
+            // If execvp() is successful, it won't return at all, otherwise there's an error
             perror("execvp");
             exit(1);
         } else if (pid > 0) {
