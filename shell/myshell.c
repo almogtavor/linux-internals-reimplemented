@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #define READ_END 0
 #define WRITE_END 1
@@ -99,7 +100,7 @@ int process_arglist(int count, char **arglist) {
 
         pid_t pid = fork();
         if (pid == 0) {
-            int fd = open(arglist[output_idx + 1], O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            int fd = open(arglist[output_idx + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
             if (fd == -1) {
                 perror("open output");
                 exit(1);
@@ -120,27 +121,32 @@ int process_arglist(int count, char **arglist) {
     }
 
     // Handle pipes
-    int pipe_count = 0;
+    int pipes_counter = 0;
     for (int i = 0; i < count; i++) {
         if (strcmp(arglist[i], "|") == 0)
-            pipe_count++;
+            pipes_counter++;
     }
 
-    if (pipe_count > 0) {
-        int num_cmds = pipe_count + 1;
-        char **commands[10];  // max 10 commands
+    if (pipes_counter > 0) {
+        int num_cmds = pipes_counter + 1;
+        // Breaks arglist into separate null-terminated command arrays by replacing | with NULL
+        char **commands[10];  // Array can hold up to 10 commands
         int cmd_idx = 0;
-        commands[cmd_idx++] = arglist;
-
+        
+        commands[cmd_idx] = arglist;  // First command
+        cmd_idx++;
+        
         for (int i = 0; i < count; i++) {
             if (strcmp(arglist[i], "|") == 0) {
-                arglist[i] = NULL;
-                commands[cmd_idx++] = &arglist[i + 1];
+                arglist[i] = NULL;  // Terminate previous command
+                commands[cmd_idx] = arglist + i + 1;  // Next command starts after '|'
+                cmd_idx++;
             }
         }
+        
 
-        int pipes[pipe_count][2];
-        for (int i = 0; i < pipe_count; i++) {
+        int pipes[pipes_counter][2];
+        for (int i = 0; i < pipes_counter; i++) {
             if (pipe(pipes[i]) == -1) {
                 perror("pipe");
                 return 1;
@@ -156,11 +162,11 @@ int process_arglist(int count, char **arglist) {
                 if (i > 0) {
                     redirect(pipes[i - 1][READ_END], STDIN_FILENO);
                 }
-                if (i < pipe_count) {
+                if (i < pipes_counter) {
                     redirect(pipes[i][WRITE_END], STDOUT_FILENO);
                 }
 
-                for (int j = 0; j < pipe_count; j++) {
+                for (int j = 0; j < pipes_counter; j++) {
                     close(pipes[j][READ_END]);
                     close(pipes[j][WRITE_END]);
                 }
@@ -171,7 +177,7 @@ int process_arglist(int count, char **arglist) {
             }
         }
 
-        for (int i = 0; i < pipe_count; i++) {
+        for (int i = 0; i < pipes_counter; i++) {
             close(pipes[i][READ_END]);
             close(pipes[i][WRITE_END]);
         }
