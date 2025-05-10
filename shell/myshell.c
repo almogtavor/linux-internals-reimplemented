@@ -129,8 +129,8 @@ int process_arglist(int count, char **arglist) {
 
     if (pipes_counter > 0) {
         int num_cmds = pipes_counter + 1;
-        // Breaks arglist into separate null-terminated command arrays by replacing | with NULL
-        char **commands[10];  // Array can hold up to 10 commands
+        // Breaks arglist into separate null terminated command arrays by replacing | with NULLx
+        char **commands[10];  // 10 commands max
         int cmd_idx = 0;
         
         commands[cmd_idx] = arglist;  // First command
@@ -139,14 +139,17 @@ int process_arglist(int count, char **arglist) {
         for (int i = 0; i < count; i++) {
             if (strcmp(arglist[i], "|") == 0) {
                 arglist[i] = NULL;  // Terminate previous command
-                commands[cmd_idx] = arglist + i + 1;  // Next command starts after '|'
+                commands[cmd_idx] = &arglist[i + 1];  // Next command starts after '|'
                 cmd_idx++;
             }
         }
         
-
+        // Allocate and create pipe_count pipes ([read, write] pairs).
         int pipes[pipes_counter][2];
         for (int i = 0; i < pipes_counter; i++) {
+            // initialize a new pipe and store its file descriptors in the ith row
+            // creates a new pipe and returns two file descriptors, one referring to the read end of the
+            // pipe, the other referring to the write end
             if (pipe(pipes[i]) == -1) {
                 perror("pipe");
                 return 1;
@@ -156,27 +159,27 @@ int process_arglist(int count, char **arglist) {
         for (int i = 0; i < num_cmds; i++) {
             pid_t pid = fork();
             if (pid == 0) {
-                // SIGINT default in child
-                signal(SIGINT, SIG_DFL);
-
+                signal(SIGINT, SIG_DFL); // restore Ctrl+C for children
+        
                 if (i > 0) {
-                    redirect(pipes[i - 1][READ_END], STDIN_FILENO);
+                    redirect(pipes[i - 1][READ_END], STDIN_FILENO);  // if not first, read from previous pipe
                 }
                 if (i < pipes_counter) {
-                    redirect(pipes[i][WRITE_END], STDOUT_FILENO);
+                    redirect(pipes[i][WRITE_END], STDOUT_FILENO);    // if not last, write to next pipe
                 }
-
+        
+                // Close all pipe ends in child
                 for (int j = 0; j < pipes_counter; j++) {
                     close(pipes[j][READ_END]);
                     close(pipes[j][WRITE_END]);
                 }
-
+        
                 execvp(commands[i][0], commands[i]);
                 perror("execvp");
                 exit(1);
             }
         }
-
+        
         for (int i = 0; i < pipes_counter; i++) {
             close(pipes[i][READ_END]);
             close(pipes[i][WRITE_END]);
