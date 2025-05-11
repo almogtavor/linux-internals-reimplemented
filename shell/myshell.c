@@ -44,19 +44,7 @@ void redirect(int fd, int target_fd) {
     close(fd);
 }
 
-int process_arglist(int count, char **arglist) {
-    int background = 0;
-
-    // Background execution
-    // I remove & from the argument list (and not giving it to execvp())
-    // Later we would not waitpid() to the child if background
-    if (strcmp(arglist[count - 1], "&") == 0) {
-        background = 1;
-        arglist[count - 1] = NULL;
-        count--;
-    }
-
-    // Handle input redirection
+int handle_input_redirection(char **arglist, int count) {
     int input_idx = find_symbol(arglist, count, "<");
     if (input_idx != -1) {
         // I expect a filename after the < so if < is the last argument it’s invalid
@@ -89,8 +77,11 @@ int process_arglist(int count, char **arglist) {
         }
         return 1;
     }
+    return 0;
+}
 
-    // Handle output redirection
+
+int handle_output_redirection(char **arglist, int count) {
     int output_idx = find_symbol(arglist, count, ">");
     if (output_idx != -1) {
         if (output_idx + 1 >= count) {
@@ -119,8 +110,10 @@ int process_arglist(int count, char **arglist) {
         }
         return 1;
     }
+    return 0;
+}
 
-    // Handle pipes
+int handle_pipes(char **arglist, int count) {
     int pipes_counter = 0;
     for (int i = 0; i < count; i++) {
         if (strcmp(arglist[i], "|") == 0)
@@ -130,21 +123,21 @@ int process_arglist(int count, char **arglist) {
     if (pipes_counter > 0) {
         int num_cmds = pipes_counter + 1;
         // Breaks arglist into separate null terminated command arrays by replacing | with NULLx
-        char **commands[10];  // 10 commands max
+        char **commands[10]; // 10 commands max
         int cmd_idx = 0;
         
-        commands[cmd_idx] = arglist;  // First command
+        commands[cmd_idx] = arglist; // First command
         cmd_idx++;
         
         for (int i = 0; i < count; i++) {
             if (strcmp(arglist[i], "|") == 0) {
-                arglist[i] = NULL;  // Terminate previous command
-                commands[cmd_idx] = &arglist[i + 1];  // Next command starts after '|'
+                arglist[i] = NULL; // Terminate previous command
+                commands[cmd_idx] = &arglist[i + 1]; // Next command starts after '|'
                 cmd_idx++;
             }
         }
         
-        // Allocate and create pipe_count pipes ([read, write] pairs).
+        // Allocate and create pipes_counter pipes ([read, write] pairs).
         int pipes[pipes_counter][2];
         for (int i = 0; i < pipes_counter; i++) {
             // initialize a new pipe and store its file descriptors in the ith row
@@ -162,18 +155,19 @@ int process_arglist(int count, char **arglist) {
                 signal(SIGINT, SIG_DFL); // restore Ctrl+C for children
         
                 if (i > 0) {
-                    redirect(pipes[i - 1][READ_END], STDIN_FILENO);  // if not first, read from previous pipe
+                    redirect(pipes[i - 1][READ_END], STDIN_FILENO); // if not first, read from previous pipe
                 }
                 if (i < pipes_counter) {
-                    redirect(pipes[i][WRITE_END], STDOUT_FILENO);    // if not last, write to next pipe
+                    redirect(pipes[i][WRITE_END], STDOUT_FILENO); // if not last, write to next pipe
                 }
         
-                // Close all pipe ends in child
+                // Close all pipe ends in child because we already redirected them
                 for (int j = 0; j < pipes_counter; j++) {
                     close(pipes[j][READ_END]);
                     close(pipes[j][WRITE_END]);
                 }
         
+                // all unnecessary pipe ends are closed, run the command
                 execvp(commands[i][0], commands[i]);
                 perror("execvp");
                 exit(1);
@@ -185,17 +179,45 @@ int process_arglist(int count, char **arglist) {
             close(pipes[i][WRITE_END]);
         }
 
+        // will block the parent process until any of its children has finished
+        // the loop is to wait for all child processes created (in no particular order)
         for (int i = 0; i < num_cmds; i++) {
             wait(NULL);
         }
 
         return 1;
     }
+    return 0;
+}
 
-    // Simple command (foreground or background)
+
+int process_arglist(int count, char **arglist) {
+    int retVal, background = 0;
+
+    // Background execution
+    // I remove & from the argument list (and not giving it to execvp())
+    // Later we would not waitpid() to the child if background
+    if (strcmp(arglist[count - 1], "&") == 0) {
+        background = 1;
+        arglist[count - 1] = NULL;
+        count--;
+    }
+
+    retVal = handle_input_redirection(arglist, count);
+    if (retVal == 1)
+        return retVal;
+
+    retVal = handle_output_redirection(arglist, count);
+    if (retVal == 1)
+        return retVal;
+
+    retVal = handle_pipes(arglist, count);
+    if (retVal == 1)
+        return retVal;
+
     pid_t pid = fork();
     if (pid == 0) {
-        // Restore SIGINT for child
+        // Restore the SIGINT for child and set it based on foreground/background
         signal(SIGINT, background ? SIG_IGN : SIG_DFL);
         execvp(arglist[0], arglist);
         perror("execvp");
