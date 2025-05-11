@@ -1,4 +1,3 @@
-// #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -114,12 +113,13 @@ int handle_output_redirection(char **arglist, int count) {
 
         pid_t pid = fork();
         if (pid == 0) {
+            // open the output file for writing, create or truncate it
             int fd = open(arglist[output_idx + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
             if (fd == -1) {
                 perror("open output");
                 exit(1);
             }
-
+            // redirect stdout to the file
             redirect(fd, STDOUT_FILENO);
             arglist[output_idx] = NULL;
             execvp(arglist[0], arglist);
