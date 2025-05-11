@@ -12,21 +12,44 @@
 #define READ_END 0
 #define WRITE_END 1
 
+// Reap children quickly to avoid zombies
+void reap_children(int sig) {
+    int errno_backup = errno; // for cases where the code was interrupted by a signal
+    while (waitpid(-1, NULL, WNOHANG) > 0) {} // reap every dead child
+    if (errno != ECHILD && errno != EINTR && errno != 0) {
+        perror("waitpid in SIGCHLD");
+        exit(1);
+    }
+    errno = errno_backup;
+}
+
 // Ignore SIGINT in the shell, but restore it in child processes
 // This is because by default, Ctrl+C would kill the shell but I want only child processes to die on Ctrl+C — not the shell.
 int prepare(void) {
+    // Ignore Ctrl-C in the shell itself
+    if (signal(SIGINT, SIG_IGN) == SIG_ERR) {
+        perror("signal(SIGINT)");
+        return -1;
+    }
+
+    // Set a SIGCHLD handler that reaps terminated children
     struct sigaction sa;
-    sa.sa_handler = SIG_IGN;
+    sa.sa_handler = reap_children;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    return sigaction(SIGINT, &sa, NULL);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror("sigaction(SIGCHLD)");
+        return -1;
+    }
+
+    return 0;
 }
 
 int finalize(void) {
     return 0;
 }
 
-// Helper: find index of symbol in arglist
+// helper func: find index of symbol in arglist
 int find_symbol(char **arglist, int count, const char *symbol) {
     for (int i = 0; i < count; i++) {
         if (strcmp(arglist[i], symbol) == 0)
@@ -35,7 +58,7 @@ int find_symbol(char **arglist, int count, const char *symbol) {
     return -1;
 }
 
-// Helper: set up redirection
+// helper func: set up redirection
 void redirect(int fd, int target_fd) {
     if (dup2(fd, target_fd) == -1) {
         perror("dup2");
