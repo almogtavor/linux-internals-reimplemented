@@ -213,9 +213,43 @@ int handle_pipes(char **arglist, int count) {
     return 0;
 }
 
+int validate_arglist(char **arglist, int count) {
+    // Lone ampersand
+    if (count == 1 && strcmp(arglist[0], "&") == 0) {
+        fprintf(stderr, "Invalid command\n");
+        return 1;
+    }
+
+    // Check for malformed pipes
+    if (strcmp(arglist[0], "|") == 0 || strcmp(arglist[count - 1], "|") == 0) {
+        fprintf(stderr, "Invalid pipe syntax\n");
+        return 1;
+    }
+    for (int i = 1; i < count; i++) {
+        if (strcmp(arglist[i], "|") == 0 && strcmp(arglist[i - 1], "|") == 0) {
+            fprintf(stderr, "Invalid pipe syntax\n");
+            return 1;
+        }
+    }
+
+    // Check for redirection with no filename
+    int input_idx = find_symbol(arglist, count, "<");
+    int output_idx = find_symbol(arglist, count, ">");
+    if ((input_idx != -1 && input_idx + 1 >= count) ||
+        (output_idx != -1 && output_idx + 1 >= count)) {
+        fprintf(stderr, "Missing filename\n");
+        return 1;
+    }
+    return 0;
+}
+
 
 int process_arglist(int count, char **arglist) {
     int retVal, background = 0;
+
+    retVal = validate_arglist(arglist, count);
+    if (retVal == 1)
+        return retVal;
 
     // Background execution
     // I remove & from the argument list (and not giving it to execvp())
