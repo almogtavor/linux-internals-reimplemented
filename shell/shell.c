@@ -25,10 +25,14 @@ int main(void)
 		size_t size;
 		int count = 0;
 
+		printf("myshell$ ");
+		fflush(stdout); // Make sure prompt shows up before input
+		
 		if (getline(&line, &size, stdin) == -1) {
 			free(line);
 			break;
 		}
+		
     
 		arglist = (char**) malloc(sizeof(char*));
 		if (arglist == NULL) {
