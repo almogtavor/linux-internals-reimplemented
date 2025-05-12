@@ -14,7 +14,9 @@
 // Reap children quickly to avoid zombies
 void reap_children(int sig) {
     int errno_backup = errno; // for cases where the code was interrupted by a signal
-    while (waitpid(-1, NULL, WNOHANG) > 0) {} // reap every dead child
+    // -1 tells waitpid() to wait for any child process, NULL because I'm not interested in the child's exit status
+    // and WNOHANG prevents waiting so we only check zombie (exited but not reaped yet) processes
+    while (waitpid(-1, NULL, WNOHANG) > 0) {}
     if (errno != ECHILD && errno != EINTR && errno != 0) {
         perror("waitpid in SIGCHLD");
         exit(1);
@@ -34,13 +36,13 @@ int prepare(void) {
     // Set a SIGCHLD handler that reaps terminated children
     struct sigaction sa;
     sa.sa_handler = reap_children;
-    sigemptyset(&sa.sa_mask);
+    // SA_RESTART ensures that waitpid() is restarted if interrupted by a signal like SIGCHLD.
+    // avoids EINTR errors and reduces the need for extra checks.
     sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) { // register reap_children() as the handler for SIGCHLD
         perror("sigaction(SIGCHLD)");
         return -1;
     }
-
     return 0;
 }
 
