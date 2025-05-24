@@ -7,9 +7,6 @@
 #include <linux/types.h>
 #include "message_slot.h"
 
-#include <errno.h>
-#include <stddef.h>
-
 
 // ------------driver data structures-----------------------
 // represents one specific communication channel in the message slot device
@@ -115,6 +112,8 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long ioct
 
 static ssize_t device_write(struct file *file, const char __user *buf, size_t len, loff_t *off) {
     struct fd_private *fd_private_data = file->private_data;
+    struct slot_node *slot;
+    struct channel_node *channel;
     char kernel_buf[MESSAGE_MAX_LEN];
     size_t i;
     if (fd_private_data->channel_id == 0) // Error case 1: No channel has been set
@@ -127,10 +126,10 @@ static ssize_t device_write(struct file *file, const char __user *buf, size_t le
         for (i = 2; i < len; i += 3)
             kernel_buf[i] = '#';
 
-    struct slot_node *slot = slot_get(iminor(file_inode(file)));
+    slot = slot_get(iminor(file_inode(file)));
     if (!slot) // Other error cases: Memory allocation
         return -ENOMEM;
-    struct channel_node *channel = channel_get(slot, fd_private_data->channel_id, 1);
+    channel = channel_get(slot, fd_private_data->channel_id, 1);
     if (!channel) // Other error cases: Channel creation failure
         return -ENOMEM;
     memcpy(channel->msg, kernel_buf, len); // Save the message into the channel buffer
@@ -140,12 +139,14 @@ static ssize_t device_write(struct file *file, const char __user *buf, size_t le
 
 static ssize_t device_read(struct file *file, char __user *buf, size_t len, loff_t *off) {
     struct fd_private *fd_private_data = file->private_data;
+    struct slot_node *slot;
+    struct channel_node *channel;
     if (fd_private_data->channel_id == 0) // Err #1: No channel has been set
         return -EINVAL;
-    struct slot_node *slot = slot_get(iminor(file_inode(file)));
+    slot = slot_get(iminor(file_inode(file)));
     if (!slot) // Err #2: No slot exists for this minor
         return -EWOULDBLOCK;
-    struct channel_node *channel = channel_get(slot, fd_private_data->channel_id, 0);
+    channel = channel_get(slot, fd_private_data->channel_id, 0);
     if (!channel || channel->len == 0) // Err #2: No channel / no message has been written
         return -EWOULDBLOCK;
     if (len < channel->len) // Err #3: check user buffer is big enough
@@ -173,19 +174,22 @@ static int __init message_slot_init(void) {
 }
 
 static void __exit message_slot_exit(void) {
+    struct slot_node *s, *s_tmp;
+    struct channel_node *c;
     unregister_chrdev(MAJOR_NUM, DEVICE_NAME);
     // free all allocated memory
-    for (struct slot_node *s = slots_head; s;) {
-        for (struct channel_node *c = s->channels; c;) {
+    for (s = slots_head; s;) {
+        for (c = s->channels; c;) {
             struct channel_node *c_tmp = c->next;
             kfree(c);
             c = c_tmp;
         }
-        struct slot_node *s_tmp = s->next;
+        s_tmp = s->next;
         kfree(s);
         s = s_tmp;
     }
 }
+MODULE_LICENSE("GPL");
 
 module_init(message_slot_init);
 module_exit(message_slot_exit);

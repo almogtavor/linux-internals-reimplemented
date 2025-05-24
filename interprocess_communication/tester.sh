@@ -51,7 +51,7 @@ $READER $DEV 300 >/dev/null 2>&1
 [[ $? -ne 0 ]] && pass || fail "read empty channel"
 
 # --- Test 4 : oversize write rejected ---
-BIG=$(head -c 200 </dev/zero | tr '�' 'a')
+BIG=$(head -c 200 < /dev/zero | tr '\0' 'a')
 $SENDER $DEV 400 0 "$BIG" >/dev/null 2>&1
 [[ $? -ne 0 ]] && pass || fail "oversize write"
 

@@ -11,9 +11,6 @@ all: modules user
 modules:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
-
-
-
 # User-space programs
 user: message_sender message_reader
 
