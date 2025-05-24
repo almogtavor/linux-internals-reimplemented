@@ -1,2 +1,8 @@
-
+.idea
+shell/.idea
+interprocess_communication/.idea
+interprocess_communication/cmake-build-debug
+*/echo
 *.out
+
+shell/test.txt
