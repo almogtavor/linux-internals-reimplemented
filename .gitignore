@@ -16,3 +16,5 @@ shell/test.txt
 interprocess_communication/message_reader
 
 interprocess_communication/message_sender
+
+ipc/cmake-build-debug/

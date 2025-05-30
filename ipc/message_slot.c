@@ -95,8 +95,7 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long ioct
     unsigned int arg_value;
     if (cmd != MSG_SLOT_CHANNEL && cmd != MSG_SLOT_SET_CEN)
         return -EINVAL;
-    if (copy_from_user(&arg_value, (unsigned int __user *)ioctl_param, sizeof(unsigned int)))
-        return -EFAULT;
+    arg_value = (unsigned int)ioctl_param;
     if (cmd == MSG_SLOT_CHANNEL) {
         if (arg_value == 0)
             return -EINVAL;

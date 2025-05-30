@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
         perror("an error occurred during open");
         return 1;
     }
-    if (ioctl(fd, MSG_SLOT_CHANNEL, &channel_id)) {
+    if (ioctl(fd, MSG_SLOT_CHANNEL, channel_id)) {
         perror("an error occurred during ioctl (setting CHANNEL)");
         close(fd);
         return 1;

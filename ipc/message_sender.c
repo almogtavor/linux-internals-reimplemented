@@ -23,12 +23,12 @@ int main(int argc, char *argv[]) {
         perror("an error occurred during open");
         return 1;
     }
-    if (ioctl(fd, MSG_SLOT_SET_CEN, &censor_mode)) { // set censorship mode to the value specified in args
+    if (ioctl(fd, MSG_SLOT_SET_CEN, censor_mode)) { // set censorship mode to the value specified in args
         perror("an error occurred during ioctl (when SET_CEN)");
         close(fd);
         return 1;
     }
-    if (ioctl(fd, MSG_SLOT_CHANNEL, &channel_id)) {
+    if (ioctl(fd, MSG_SLOT_CHANNEL, channel_id)) {
         perror("an error occurred during ioctl (setting CHANNEL)");
         close(fd);
         return 1;
